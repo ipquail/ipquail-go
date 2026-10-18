@@ -84,6 +84,12 @@ func asnQuery(ip netip.Addr) string {
 	return strings.Join(Reverse(nibbles), ".") + ".origin6.asn.cymru.com"
 }
 
+// Handles /health
+func healthHandler(w http.ResponseWriter, _ *http.Request) {
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	_, _ = io.WriteString(w, "ok\n")
+}
+
 // Handles /ip
 func ipHandler(w http.ResponseWriter, r *http.Request) {
 	remoteIP, ok := requestIP(w, r)
@@ -174,6 +180,7 @@ func (app *application) asnApiHandler(w http.ResponseWriter, r *http.Request) {
 
 func newMux(app *application) *http.ServeMux {
 	mux := http.NewServeMux()
+	mux.HandleFunc("GET /health", healthHandler)
 	mux.HandleFunc("GET /ip", ipHandler)
 	mux.HandleFunc("GET /ptr", app.ptrHandler)
 	mux.HandleFunc("GET /asn", app.asnHandler)

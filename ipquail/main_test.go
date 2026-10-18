@@ -143,6 +143,19 @@ func TestASNQuery(t *testing.T) {
 	}
 }
 
+func TestHealthHandlerDoesNotRequireClientIP(t *testing.T) {
+	r := httptest.NewRequest(http.MethodGet, "/health", nil)
+	r.RemoteAddr = "192.0.2.10:12345"
+	w := httptest.NewRecorder()
+
+	healthHandler(w, r)
+
+	assertResponse(t, w, http.StatusOK, "ok\n")
+	if got := w.Header().Get("Content-Type"); got != "text/plain; charset=utf-8" {
+		t.Errorf("Content-Type = %q, want %q", got, "text/plain; charset=utf-8")
+	}
+}
+
 func TestPTRHandler(t *testing.T) {
 	tests := []struct {
 		name       string
@@ -333,7 +346,7 @@ func TestMuxRoutes(t *testing.T) {
 	}
 	handler := newMux(app)
 
-	for _, path := range []string{"/ip", "/ptr", "/asn", "/api/ip", "/api/ptr", "/api/asn"} {
+	for _, path := range []string{"/health", "/ip", "/ptr", "/asn", "/api/ip", "/api/ptr", "/api/asn"} {
 		t.Run(path, func(t *testing.T) {
 			w := httptest.NewRecorder()
 			handler.ServeHTTP(w, trustedRequest(http.MethodGet, path))
@@ -343,13 +356,15 @@ func TestMuxRoutes(t *testing.T) {
 		})
 	}
 
-	t.Run("unsupported method", func(t *testing.T) {
-		w := httptest.NewRecorder()
-		handler.ServeHTTP(w, trustedRequest(http.MethodPost, "/ip"))
-		if w.Code != http.StatusMethodNotAllowed {
-			t.Fatalf("status = %d, want %d", w.Code, http.StatusMethodNotAllowed)
-		}
-	})
+	for _, path := range []string{"/health", "/ip"} {
+		t.Run("unsupported method "+path, func(t *testing.T) {
+			w := httptest.NewRecorder()
+			handler.ServeHTTP(w, trustedRequest(http.MethodPost, path))
+			if w.Code != http.StatusMethodNotAllowed {
+				t.Fatalf("POST %s status = %d, want %d", path, w.Code, http.StatusMethodNotAllowed)
+			}
+		})
+	}
 
 	t.Run("unknown path", func(t *testing.T) {
 		w := httptest.NewRecorder()

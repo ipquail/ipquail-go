@@ -56,6 +56,21 @@ docker build -t ipquail-go:local .
 IPQUAIL_IMAGE=ipquail-go:local docker compose up -d
 ```
 
+## Health check
+
+The image checks `http://127.0.0.1:3000/health` every 30 seconds. The endpoint
+returns `ok` when the HTTP process is responsive and does not perform DNS or
+other external dependency checks. Compose inherits this image health check;
+inspect its current state with:
+
+```sh
+docker compose ps
+```
+
+`/health` is intended for Docker and host-local monitoring through the backend
+port. The nginx examples in the README deliberately do not expose it through
+the public virtual hosts.
+
 If nginx also runs in Docker, put both services on a dedicated private network,
 proxy to `ipquail:3000`, and omit `ports` from the backend service. Keep
 untrusted containers off that network.
