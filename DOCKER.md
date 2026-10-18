@@ -35,16 +35,25 @@ default. Do not use that form on an Internet-facing host: the backend trusts
 `X-Real-IP` from loopback and private-network peers, and Docker's forwarding
 can make a direct client's peer appear to be the private bridge gateway.
 
-The equivalent Compose service is:
+The included `compose.yaml` provides the equivalent configuration and defaults
+to the latest GHCR image:
 
-```yaml
-services:
-  ipquail:
-    build: .
-    image: ipquail-go:latest
-    ports:
-      - "127.0.0.1:3000:3000"
-    restart: unless-stopped
+```sh
+docker compose pull
+docker compose up -d
+```
+
+Pin a release in production by overriding the complete image reference:
+
+```sh
+IPQUAIL_IMAGE=ghcr.io/ipquail/ipquail-go:1.2.3 docker compose up -d
+```
+
+To exercise a locally built image with the same Compose configuration:
+
+```sh
+docker build -t ipquail-go:local .
+IPQUAIL_IMAGE=ipquail-go:local docker compose up -d
 ```
 
 If nginx also runs in Docker, put both services on a dedicated private network,

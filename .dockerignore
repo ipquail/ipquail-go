@@ -37,3 +37,4 @@ scripts
 *.md
 Dockerfile
 Makefile
+compose.yaml
