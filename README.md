@@ -10,7 +10,7 @@ Go 1.26 or newer is required.
 
 ## nginx config ##
 
-The backend listens only on loopback and reads the client address from nginx's `X-Real-IP` header.
+The backend listens on port 3000 and accepts its nginx-supplied `X-Real-IP` header only from loopback or private-network peers, including a reverse proxy on a private container network.
 
 The public service intentionally exposes the same plaintext and JSON endpoints over both HTTP and HTTPS. Port 80 is not redirected because longstanding clients and older devices depend on direct, shell-friendly HTTP responses; clients that support TLS should use port 443.
 
@@ -150,4 +150,4 @@ The front-end web application uses specific IPv4 and IPv6 only hostnames. The ba
 
 ## Backend
 
-The backend listens on `127.0.0.1:3000` and is accessed through the nginx reverse proxy shown above. It has no third-party Go dependencies.
+The backend listens on port 3000 and is accessed through the nginx reverse proxy shown above. Keep it private or publish it only on the host loopback interface; clients must not be able to supply the trusted `X-Real-IP` header directly. It has no third-party Go dependencies.

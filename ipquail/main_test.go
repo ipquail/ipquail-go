@@ -102,6 +102,7 @@ func TestIPHandlerUsesTrustedRealIP(t *testing.T) {
 		{name: "missing trusted header", remoteAddr: "127.0.0.1:12345", wantStatus: http.StatusBadRequest, wantBody: "invalid client address\n"},
 		{name: "invalid trusted header", remoteAddr: "127.0.0.1:12345", realIP: "invalid", wantStatus: http.StatusBadRequest, wantBody: "invalid client address\n"},
 		{name: "multiple addresses rejected", remoteAddr: "127.0.0.1:12345", realIP: "203.0.113.10, 198.51.100.20", wantStatus: http.StatusBadRequest, wantBody: "invalid client address\n"},
+		{name: "private-network proxy accepted", remoteAddr: "172.18.0.2:12345", realIP: "203.0.113.10", wantStatus: http.StatusOK, wantBody: "203.0.113.10\n"},
 		{name: "non-loopback peer rejected", remoteAddr: "192.0.2.10:12345", realIP: "203.0.113.10", wantStatus: http.StatusForbidden, wantBody: "forbidden\n"},
 	}
 
@@ -362,8 +363,8 @@ func TestMuxRoutes(t *testing.T) {
 func TestNewServer(t *testing.T) {
 	handler := http.NewServeMux()
 	server := newServer(handler)
-	if server.Addr != "127.0.0.1:3000" {
-		t.Errorf("Addr = %q, want %q", server.Addr, "127.0.0.1:3000")
+	if server.Addr != ":3000" {
+		t.Errorf("Addr = %q, want %q", server.Addr, ":3000")
 	}
 	if server.Handler != handler {
 		t.Error("Handler does not match the configured handler")

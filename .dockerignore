@@ -1,0 +1,39 @@
+.git
+.github
+.gitignore
+.goreleaser.yaml
+.agents
+.aws
+.codex
+
+# Local configuration and credentials.
+.env
+.env.*
+
+# Build, dependency, test, and editor artifacts.
+bin
+dist
+node_modules
+vendor
+go.work
+go.work.sum
+coverage.*
+*.out
+*.test
+.idea
+.vscode
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# The container is the Go API backend only. nginx serves these files directly.
+ipquail/public
+package.json
+package-lock.json
+scripts
+
+# Files not required by the image build.
+*.md
+Dockerfile
+Makefile

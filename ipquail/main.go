@@ -36,7 +36,8 @@ func requestIP(w http.ResponseWriter, r *http.Request) (netip.Addr, bool) {
 		http.Error(w, "invalid remote address", http.StatusBadRequest)
 		return netip.Addr{}, false
 	}
-	if !peer.Addr().IsLoopback() {
+	peerIP := peer.Addr().Unmap()
+	if !peerIP.IsLoopback() && !peerIP.IsPrivate() {
 		http.Error(w, "forbidden", http.StatusForbidden)
 		return netip.Addr{}, false
 	}
@@ -184,7 +185,7 @@ func newMux(app *application) *http.ServeMux {
 
 func newServer(handler http.Handler) *http.Server {
 	return &http.Server{
-		Addr:              "127.0.0.1:3000",
+		Addr:              ":3000",
 		Handler:           handler,
 		ReadHeaderTimeout: 5 * time.Second,
 	}
