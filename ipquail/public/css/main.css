@@ -16,12 +16,19 @@
     position: absolute;
     inset: 0;
     content: "";
-    background-image: url("../assets/img/bird.png");
     background-position: right top;
     background-repeat: no-repeat;
-    background-size: 329px auto;
+    background-size: 256px auto;
     opacity: 0.3;
     pointer-events: none;
+}
+
+.address-container.ipv4-mode::before {
+    background-image: url("../assets/img/quail-64x64.png");
+}
+
+.address-container.kame-mode::before {
+    background-image: url("../assets/img/quail-walk-natural.gif");
 }
 
 .address-details {

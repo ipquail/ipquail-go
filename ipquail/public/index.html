@@ -7,7 +7,7 @@
         <meta name="viewport" content="width=device-width, initial-scale=1">
 
         <link href="css/bootstrap-5.3.8.min.css" rel="stylesheet">
-        <link href="css/main.css?v=8" rel="stylesheet">
+        <link href="css/main.css?v=9" rel="stylesheet">
     </head>
     <body class="pt-2 pt-md-5 pb-4">
     <main class="py-4 py-md-5 mb-4 bg-body-tertiary">
@@ -60,6 +60,11 @@
         code.textContent = String(value);
         $(selector).empty().append(code);
       }
+
+      $.getJSON('/api/ip', function(client) {
+        const mode = client.ip.includes(':') ? 'kame-mode' : 'ipv4-mode';
+        $('.address-container').addClass(mode);
+      });
 
       $.getJSON('//6.ipquail.com/api/ip', function(ab) {
         showValue('#ipv6', ab.ip);
