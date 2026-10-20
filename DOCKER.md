@@ -58,10 +58,12 @@ IPQUAIL_IMAGE=ipquail-go:local docker compose up -d
 
 ## Health check
 
-The image checks `http://127.0.0.1:3000/health` every 30 seconds. The endpoint
-returns `ok` when the HTTP process is responsive and does not perform DNS or
-other external dependency checks. Compose inherits this image health check;
-inspect its current state with:
+The image runs `ipquail-go --healthcheck` every 30 seconds. This built-in check
+requests `http://127.0.0.1:3000/health` with a three-second timeout and exits
+successfully only when the endpoint returns HTTP 200. The endpoint returns `ok`
+when the HTTP process is responsive and does not perform DNS or other external
+dependency checks. Compose inherits this image health check; inspect its current
+state with:
 
 ```sh
 docker compose ps

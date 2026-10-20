@@ -6,17 +6,23 @@ package main
 import (
 	"encoding/hex"
 	"encoding/json"
+	"flag"
+	"fmt"
 	"io"
 	"log"
 	"net"
 	"net/http"
 	"net/netip"
+	"os"
 	"strconv"
 	"strings"
 	"time"
 )
 
-const realIPHeader = "X-Real-IP"
+const (
+	realIPHeader   = "X-Real-IP"
+	healthCheckURL = "http://127.0.0.1:3000/health"
+)
 
 type application struct {
 	lookupAddr func(string) ([]string, error)
@@ -198,9 +204,57 @@ func newServer(handler http.Handler) *http.Server {
 	}
 }
 
-func main() {
+func checkHealth(client *http.Client, url string) error {
+	response, err := client.Get(url)
+	if err != nil {
+		return fmt.Errorf("request failed: %w", err)
+	}
+	defer response.Body.Close()
+
+	if response.StatusCode != http.StatusOK {
+		return fmt.Errorf("unexpected HTTP status: %s", response.Status)
+	}
+
+	return nil
+}
+
+func serve() error {
 	server := newServer(newMux(newApplication()))
 
 	log.Printf("listening on %s", server.Addr)
-	log.Fatal(server.ListenAndServe())
+	return server.ListenAndServe()
+}
+
+func run(args []string, stderr io.Writer, healthCheck, serveServer func() error) int {
+	flags := flag.NewFlagSet("ipquail-go", flag.ContinueOnError)
+	flags.SetOutput(stderr)
+	healthCheckMode := flags.Bool("healthcheck", false, "check whether the backend is healthy")
+	if err := flags.Parse(args); err != nil {
+		return 2
+	}
+	if flags.NArg() != 0 {
+		_, _ = fmt.Fprintf(stderr, "unexpected arguments: %s\n", strings.Join(flags.Args(), " "))
+		return 2
+	}
+
+	if *healthCheckMode {
+		if err := healthCheck(); err != nil {
+			_, _ = fmt.Fprintf(stderr, "health check failed: %v\n", err)
+			return 1
+		}
+		return 0
+	}
+
+	if err := serveServer(); err != nil {
+		_, _ = fmt.Fprintf(stderr, "server failed: %v\n", err)
+		return 1
+	}
+	return 0
+}
+
+func main() {
+	healthClient := &http.Client{Timeout: 3 * time.Second}
+	os.Exit(run(os.Args[1:], os.Stderr, func() error {
+		return checkHealth(healthClient, healthCheckURL)
+	}, serve))
 }

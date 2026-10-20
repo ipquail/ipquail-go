@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"io"
 	"log"
 	"net/http"
 	"net/http/httptest"
@@ -13,6 +14,12 @@ import (
 	"testing"
 	"time"
 )
+
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripFunc) RoundTrip(request *http.Request) (*http.Response, error) {
+	return f(request)
+}
 
 func trustedRequest(method, target string) *http.Request {
 	r := httptest.NewRequest(method, target, nil)
@@ -387,4 +394,123 @@ func TestNewServer(t *testing.T) {
 	if server.ReadHeaderTimeout != 5*time.Second {
 		t.Errorf("ReadHeaderTimeout = %s, want %s", server.ReadHeaderTimeout, 5*time.Second)
 	}
+}
+
+func TestCheckHealth(t *testing.T) {
+	t.Run("HTTP 200 succeeds", func(t *testing.T) {
+		client := &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Status:     "200 OK",
+				Body:       io.NopCloser(strings.NewReader("ok\n")),
+			}, nil
+		})}
+
+		if err := checkHealth(client, "http://health.test/health"); err != nil {
+			t.Fatalf("checkHealth() error = %v", err)
+		}
+	})
+
+	t.Run("non-200 fails", func(t *testing.T) {
+		client := &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+			return &http.Response{
+				StatusCode: http.StatusServiceUnavailable,
+				Status:     "503 Service Unavailable",
+				Body:       io.NopCloser(strings.NewReader("unhealthy\n")),
+			}, nil
+		})}
+
+		err := checkHealth(client, "http://health.test/health")
+		if err == nil || !strings.Contains(err.Error(), "503 Service Unavailable") {
+			t.Fatalf("checkHealth() error = %v, want HTTP 503 error", err)
+		}
+	})
+
+	t.Run("request error fails", func(t *testing.T) {
+		err := checkHealth(http.DefaultClient, "://invalid-url")
+		if err == nil || !strings.Contains(err.Error(), "request failed") {
+			t.Fatalf("checkHealth() error = %v, want request error", err)
+		}
+	})
+
+	t.Run("timeout fails", func(t *testing.T) {
+		client := &http.Client{
+			Timeout: time.Millisecond,
+			Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
+				<-request.Context().Done()
+				return nil, request.Context().Err()
+			}),
+		}
+		err := checkHealth(client, "http://health.test/health")
+		if err == nil || !strings.Contains(err.Error(), "request failed") {
+			t.Fatalf("checkHealth() error = %v, want timeout error", err)
+		}
+	})
+}
+
+func TestRun(t *testing.T) {
+	t.Run("healthcheck mode", func(t *testing.T) {
+		var stderr bytes.Buffer
+		healthChecked := false
+		serverStarted := false
+
+		exitCode := run([]string{"--healthcheck"}, &stderr, func() error {
+			healthChecked = true
+			return nil
+		}, func() error {
+			serverStarted = true
+			return nil
+		})
+
+		if exitCode != 0 {
+			t.Errorf("exit code = %d, want 0; stderr = %q", exitCode, stderr.String())
+		}
+		if !healthChecked {
+			t.Error("health check was not run")
+		}
+		if serverStarted {
+			t.Error("server started in healthcheck mode")
+		}
+	})
+
+	t.Run("default mode", func(t *testing.T) {
+		var stderr bytes.Buffer
+		healthChecked := false
+		serverStarted := false
+
+		exitCode := run(nil, &stderr, func() error {
+			healthChecked = true
+			return nil
+		}, func() error {
+			serverStarted = true
+			return nil
+		})
+
+		if exitCode != 0 {
+			t.Errorf("exit code = %d, want 0; stderr = %q", exitCode, stderr.String())
+		}
+		if healthChecked {
+			t.Error("health check ran in default mode")
+		}
+		if !serverStarted {
+			t.Error("server was not started")
+		}
+	})
+
+	t.Run("healthcheck failure", func(t *testing.T) {
+		var stderr bytes.Buffer
+		exitCode := run([]string{"--healthcheck"}, &stderr, func() error {
+			return errors.New("connection refused")
+		}, func() error {
+			t.Fatal("server started in healthcheck mode")
+			return nil
+		})
+
+		if exitCode != 1 {
+			t.Errorf("exit code = %d, want 1", exitCode)
+		}
+		if got := stderr.String(); !strings.Contains(got, "health check failed: connection refused") {
+			t.Errorf("stderr = %q, want health check error", got)
+		}
+	})
 }
