@@ -2,7 +2,7 @@
 
 Here is a Go version of ipquail.com. The backend uses Go's standard `net/http` package.
 
-Go 1.26 or newer is required.
+Go 1.27.3 or newer is required.
 
 	cd ipquail
 	go build
