@@ -382,6 +382,43 @@ func TestMuxRoutes(t *testing.T) {
 	})
 }
 
+func TestMetricsRouteAndMiddleware(t *testing.T) {
+	handler := newMux(&application{
+		lookupAddr: func(string) ([]string, error) { return nil, nil },
+		lookupTXT:  func(string) ([]string, error) { return nil, nil },
+	})
+
+	for _, target := range []string{"/health", "/does-not-exist"} {
+		w := httptest.NewRecorder()
+		handler.ServeHTTP(w, httptest.NewRequest(http.MethodGet, target, nil))
+	}
+
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/metrics", nil))
+	if w.Code != http.StatusOK {
+		t.Fatalf("GET /metrics status = %d, want %d", w.Code, http.StatusOK)
+	}
+	if got := w.Header().Get("Content-Type"); got != "text/plain; version=0.0.4; charset=utf-8" {
+		t.Fatalf("Content-Type = %q", got)
+	}
+	for _, want := range []string{
+		"# TYPE ipquail_http_requests_total counter",
+		`ipquail_http_requests_total{method="GET",route="GET /health",status="200"} 1`,
+		`ipquail_http_requests_total{method="GET",route="other",status="404"} 1`,
+		`ipquail_http_request_duration_seconds_count{method="GET",route="GET /health",status="200"} 1`,
+	} {
+		if !strings.Contains(w.Body.String(), want) {
+			t.Errorf("metrics response missing %q:\n%s", want, w.Body.String())
+		}
+	}
+
+	w = httptest.NewRecorder()
+	handler.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/metrics", nil))
+	if w.Code != http.StatusMethodNotAllowed {
+		t.Errorf("POST /metrics status = %d, want %d", w.Code, http.StatusMethodNotAllowed)
+	}
+}
+
 func TestNewServer(t *testing.T) {
 	handler := http.NewServeMux()
 	server := newServer(handler)

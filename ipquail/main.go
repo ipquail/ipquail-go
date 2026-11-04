@@ -14,8 +14,10 @@ import (
 	"net/http"
 	"net/netip"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -27,6 +29,98 @@ const (
 type application struct {
 	lookupAddr func(string) ([]string, error)
 	lookupTXT  func(string) ([]string, error)
+}
+
+type requestMetricKey struct {
+	method string
+	route  string
+	status int
+}
+
+type requestMetrics struct {
+	mu        sync.Mutex
+	requests  map[requestMetricKey]uint64
+	durations map[requestMetricKey]float64
+}
+
+func newRequestMetrics() *requestMetrics {
+	return &requestMetrics{
+		requests:  make(map[requestMetricKey]uint64),
+		durations: make(map[requestMetricKey]float64),
+	}
+}
+
+type statusResponseWriter struct {
+	http.ResponseWriter
+	status int
+}
+
+func (w *statusResponseWriter) WriteHeader(status int) {
+	if w.status != 0 {
+		return
+	}
+	w.status = status
+	w.ResponseWriter.WriteHeader(status)
+}
+
+func (w *statusResponseWriter) Write(body []byte) (int, error) {
+	if w.status == 0 {
+		w.WriteHeader(http.StatusOK)
+	}
+	return w.ResponseWriter.Write(body)
+}
+
+func (metrics *requestMetrics) middleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+		wrapped := &statusResponseWriter{ResponseWriter: w}
+		next.ServeHTTP(wrapped, r)
+		status := wrapped.status
+		if status == 0 {
+			status = http.StatusOK
+		}
+		route := r.Pattern
+		if route == "" {
+			route = "other"
+		}
+		key := requestMetricKey{method: r.Method, route: route, status: status}
+		metrics.mu.Lock()
+		metrics.requests[key]++
+		metrics.durations[key] += time.Since(start).Seconds()
+		metrics.mu.Unlock()
+	})
+}
+
+func (metrics *requestMetrics) handler(w http.ResponseWriter, _ *http.Request) {
+	w.Header().Set("Content-Type", "text/plain; version=0.0.4; charset=utf-8")
+	metrics.mu.Lock()
+	keys := make([]requestMetricKey, 0, len(metrics.requests))
+	for key := range metrics.requests {
+		keys = append(keys, key)
+	}
+	sort.Slice(keys, func(i, j int) bool {
+		a, b := keys[i], keys[j]
+		if a.route != b.route {
+			return a.route < b.route
+		}
+		if a.method != b.method {
+			return a.method < b.method
+		}
+		return a.status < b.status
+	})
+	_, _ = io.WriteString(w, "# HELP ipquail_http_requests_total Total HTTP requests.\n# TYPE ipquail_http_requests_total counter\n")
+	for _, key := range keys {
+		_, _ = fmt.Fprintf(w, "ipquail_http_requests_total{method=%q,route=%q,status=%q} %d\n", key.method, key.route, strconv.Itoa(key.status), metrics.requests[key])
+	}
+	_, _ = io.WriteString(w, "# HELP ipquail_http_request_duration_seconds_sum Total HTTP request duration in seconds.\n# TYPE ipquail_http_request_duration_seconds_sum counter\n")
+	for _, key := range keys {
+		_, _ = fmt.Fprintf(w, "ipquail_http_request_duration_seconds_sum{method=%q,route=%q,status=%q} %g\n", key.method, key.route, strconv.Itoa(key.status), metrics.durations[key])
+	}
+	_, _ = io.WriteString(w, "# HELP ipquail_http_request_duration_seconds_count Total HTTP requests observed for duration.\n# TYPE ipquail_http_request_duration_seconds_count counter\n")
+	for _, key := range keys {
+		_, _ = fmt.Fprintf(w, "ipquail_http_request_duration_seconds_count{method=%q,route=%q,status=%q} %d\n", key.method, key.route, strconv.Itoa(key.status), metrics.requests[key])
+	}
+	metrics.mu.Unlock()
 }
 
 func newApplication() *application {
@@ -184,8 +278,10 @@ func (app *application) asnApiHandler(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, map[string]string{"asn": asn})
 }
 
-func newMux(app *application) *http.ServeMux {
+func newMux(app *application) http.Handler {
 	mux := http.NewServeMux()
+	metrics := newRequestMetrics()
+	mux.HandleFunc("GET /metrics", metrics.handler)
 	mux.HandleFunc("GET /health", healthHandler)
 	mux.HandleFunc("GET /ip", ipHandler)
 	mux.HandleFunc("GET /ptr", app.ptrHandler)
@@ -193,7 +289,7 @@ func newMux(app *application) *http.ServeMux {
 	mux.HandleFunc("GET /api/ip", ipApiHandler)
 	mux.HandleFunc("GET /api/ptr", app.ptrApiHandler)
 	mux.HandleFunc("GET /api/asn", app.asnApiHandler)
-	return mux
+	return metrics.middleware(mux)
 }
 
 func newServer(handler http.Handler) *http.Server {

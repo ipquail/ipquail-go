@@ -6,7 +6,8 @@ configuration files, or persistent application data.
 
 The website's static files are not included in the image. As in the nginx
 configuration in the [README](README.md), nginx serves `ipquail/public`
-directly and proxies `/ip`, `/ptr`, `/asn`, and `/api/` to the Go backend.
+directly and proxies `/ip`, `/ptr`, `/asn`, `/api/`, and `/metrics` to the Go
+backend. The nginx examples restrict `/metrics` to loopback clients.
 
 ## Build the image
 
@@ -72,6 +73,10 @@ docker compose ps
 `/health` is intended for Docker and host-local monitoring through the backend
 port. The nginx examples in the README deliberately do not expose it through
 the public virtual hosts.
+
+`/metrics` exposes Prometheus-format HTTP request counts and durations. The
+README nginx examples proxy it only for loopback clients; update that allowlist
+if a scraper runs on a different host.
 
 If nginx also runs in Docker, put both services on a dedicated private network,
 proxy to `ipquail:3000`, and omit `ports` from the backend service. Keep

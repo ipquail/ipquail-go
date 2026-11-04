@@ -1,0 +1,15 @@
+# Production backend for use with a host-installed Apache, Nginx, or Caddy.
+# Copy .env.example to .env and pin IPQUAIL_VERSION to a release before deploy.
+services:
+  ipquail:
+    image: ghcr.io/ipquail/ipquail-go:${IPQUAIL_VERSION:-latest}
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3000:3000"
+    read_only: true
+    init: true
+    cap_drop:
+      - ALL
+    pids_limit: 64
+    security_opt:
+      - no-new-privileges:true

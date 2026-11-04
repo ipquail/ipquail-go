@@ -1,0 +1,29 @@
+(ipquail) {
+	root * /var/www/ipquail/public
+	@backend path /ip /ptr /asn /api/*
+	handle @backend {
+		reverse_proxy 127.0.0.1:3000 {
+			header_up X-Real-IP {http.request.remote.host}
+		}
+	}
+	@metrics path /metrics /health
+	handle @metrics {
+		respond "Not found" 404
+	}
+	@commandline {
+		path /
+		header_regexp User-Agent "(?i)(curl|Python-urllib|OpenBSD|Go-http-client)"
+	}
+	rewrite @commandline /ip
+	handle {
+		file_server
+	}
+}
+
+http://ipquail.com, http://4.ipquail.com, http://6.ipquail.com, http://www.ipquail.com {
+	import ipquail
+}
+
+https://ipquail.com, https://4.ipquail.com, https://6.ipquail.com, https://www.ipquail.com {
+	import ipquail
+}
