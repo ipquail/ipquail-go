@@ -32,9 +32,10 @@ type application struct {
 }
 
 type requestMetricKey struct {
-	method string
-	route  string
-	status int
+	method    string
+	route     string
+	status    int
+	ipVersion string
 }
 
 type requestMetrics struct {
@@ -83,7 +84,7 @@ func (metrics *requestMetrics) middleware(next http.Handler) http.Handler {
 		if route == "" {
 			route = "other"
 		}
-		key := requestMetricKey{method: r.Method, route: route, status: status}
+		key := requestMetricKey{method: r.Method, route: route, status: status, ipVersion: requestIPVersion(r)}
 		metrics.mu.Lock()
 		metrics.requests[key]++
 		metrics.durations[key] += time.Since(start).Seconds()
@@ -110,17 +111,33 @@ func (metrics *requestMetrics) handler(w http.ResponseWriter, _ *http.Request) {
 	})
 	_, _ = io.WriteString(w, "# HELP ipquail_http_requests_total Total HTTP requests.\n# TYPE ipquail_http_requests_total counter\n")
 	for _, key := range keys {
-		_, _ = fmt.Fprintf(w, "ipquail_http_requests_total{method=%q,route=%q,status=%q} %d\n", key.method, key.route, strconv.Itoa(key.status), metrics.requests[key])
+		_, _ = fmt.Fprintf(w, "ipquail_http_requests_total{method=%q,route=%q,status=%q,ip_version=%q} %d\n", key.method, key.route, strconv.Itoa(key.status), key.ipVersion, metrics.requests[key])
 	}
 	_, _ = io.WriteString(w, "# HELP ipquail_http_request_duration_seconds_sum Total HTTP request duration in seconds.\n# TYPE ipquail_http_request_duration_seconds_sum counter\n")
 	for _, key := range keys {
-		_, _ = fmt.Fprintf(w, "ipquail_http_request_duration_seconds_sum{method=%q,route=%q,status=%q} %g\n", key.method, key.route, strconv.Itoa(key.status), metrics.durations[key])
+		_, _ = fmt.Fprintf(w, "ipquail_http_request_duration_seconds_sum{method=%q,route=%q,status=%q,ip_version=%q} %g\n", key.method, key.route, strconv.Itoa(key.status), key.ipVersion, metrics.durations[key])
 	}
 	_, _ = io.WriteString(w, "# HELP ipquail_http_request_duration_seconds_count Total HTTP requests observed for duration.\n# TYPE ipquail_http_request_duration_seconds_count counter\n")
 	for _, key := range keys {
-		_, _ = fmt.Fprintf(w, "ipquail_http_request_duration_seconds_count{method=%q,route=%q,status=%q} %d\n", key.method, key.route, strconv.Itoa(key.status), metrics.requests[key])
+		_, _ = fmt.Fprintf(w, "ipquail_http_request_duration_seconds_count{method=%q,route=%q,status=%q,ip_version=%q} %d\n", key.method, key.route, strconv.Itoa(key.status), key.ipVersion, metrics.requests[key])
 	}
 	metrics.mu.Unlock()
+}
+
+func requestIPVersion(r *http.Request) string {
+	if ip, err := netip.ParseAddr(r.Header.Get(realIPHeader)); err == nil {
+		if ip.Unmap().Is4() {
+			return "4"
+		}
+		return "6"
+	}
+	if peer, err := netip.ParseAddrPort(r.RemoteAddr); err == nil {
+		if peer.Addr().Unmap().Is4() {
+			return "4"
+		}
+		return "6"
+	}
+	return "unknown"
 }
 
 func newApplication() *application {

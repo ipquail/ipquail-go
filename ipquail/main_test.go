@@ -403,9 +403,9 @@ func TestMetricsRouteAndMiddleware(t *testing.T) {
 	}
 	for _, want := range []string{
 		"# TYPE ipquail_http_requests_total counter",
-		`ipquail_http_requests_total{method="GET",route="GET /health",status="200"} 1`,
-		`ipquail_http_requests_total{method="GET",route="other",status="404"} 1`,
-		`ipquail_http_request_duration_seconds_count{method="GET",route="GET /health",status="200"} 1`,
+		`ipquail_http_requests_total{method="GET",route="GET /health",status="200",ip_version="4"} 1`,
+		`ipquail_http_requests_total{method="GET",route="other",status="404",ip_version="4"} 1`,
+		`ipquail_http_request_duration_seconds_count{method="GET",route="GET /health",status="200",ip_version="4"} 1`,
 	} {
 		if !strings.Contains(w.Body.String(), want) {
 			t.Errorf("metrics response missing %q:\n%s", want, w.Body.String())
